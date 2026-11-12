@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Verken erfgoedkaarten en voeg tijdelijk je eigen CSV met RD-coördinaten toe. Gegevens blijven in je browser.">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Erfgoedatlas — eigen gegevens op de kaart</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/ol.css">
+  <link rel="stylesheet" href="assets/style.css">
+  <script defer src="vendor/ol.js"></script>
+  <script defer src="vendor/proj4.js"></script>
+  <script defer src="vendor/papaparse.min.js"></script>
+  <script defer src="assets/catalog.js"></script>
+  <script defer src="assets/csv-core.js"></script>
+  <script defer src="assets/app.js"></script>
+</head>
+<body>
+  <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m3 7 9-5 9 5-9 5Zm0 5 9 5 9-5M3 17l9 5 9-5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-crosshair" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5m0 10v5M2 12h5m10 0h5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M19 10c0 5-7 12-7 12S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 14h18M9 4v16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  </defs></svg>
+  <a class="skip-link" href="#sidebar">Naar kaartlagen en import</a>
+  <header class="site-header">
+    <button id="sidebar-toggle" class="icon-button mobile-only" aria-label="Kaartlagen tonen of verbergen" aria-expanded="true"><svg><use href="#i-layers"/></svg></button>
+    <a href="./" class="brand" aria-label="Erfgoedatlas startpagina"><span class="brand-mark"><svg viewBox="0 0 36 36"><path d="m5 8 8-3 10 4 8-3v22l-8 3-10-4-8 3Zm8-3v22M23 9v22"/><circle cx="23" cy="15" r="3"/></svg></span><span><strong>Erfgoedatlas</strong><small>Eigen gegevens op de kaart</small></span></a>
+    <nav aria-label="Hoofdnavigatie"><span class="nav-current">De kaart</span><button id="about-button" class="text-button">Over deze atlas</button><a class="external-link" href="https://rce.webgis.nl/nl/map/erfgoedatlas" target="_blank" rel="noopener">RCE Erfgoedatlas <span aria-hidden="true">↗</span></a></nav>
+    <button id="header-import" class="primary-button" aria-label="CSV toevoegen"><svg><use href="#i-upload"/></svg><span>CSV toevoegen</span></button>
+  </header>
+  <main class="workspace">
+    <aside class="sidebar" id="sidebar" aria-label="Kaartlagen en eigen gegevens">
+      <section class="import-card" aria-labelledby="import-heading">
+        <div class="eyebrow">VAN GEGEVENS NAAR INZICHT</div>
+        <h1 id="import-heading">Jouw punten. Ons verleden.</h1>
+        <p>Bekijk je eigen locaties in de context van het Nederlandse erfgoed.</p>
+        <div id="drop-zone" class="drop-zone">
+          <svg class="upload-icon"><use href="#i-upload"/></svg>
+          <strong>Sleep je CSV hierheen</strong><span>of laat het los op de kaart</span>
+          <button id="choose-file" class="secondary-button">Bestand kiezen</button>
+          <small>X en Y in RD · maximaal 50.000 rijen</small>
+        </div>
+        <div class="example-row"><button id="demo-button" class="text-button">Probeer een voorbeeld <span aria-hidden="true">↗</span></button><a href="voorbeeld-rd.csv" download>CSV downloaden</a></div>
+        <input type="file" id="csv-file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" multiple hidden>
+      </section>
+      <div class="layer-tabs" role="tablist" aria-label="Kaartlagen"><button id="tab-catalog" role="tab" aria-selected="true" aria-controls="catalog-panel" class="active">Erfgoedlagen</button><button id="tab-own" role="tab" aria-selected="false" aria-controls="own-panel" tabindex="-1">Mijn lagen <span id="own-count" class="counter">0</span></button></div>
+      <section id="catalog-panel" role="tabpanel" aria-labelledby="tab-catalog" class="layer-panel">
+        <div class="catalog-search"><svg><use href="#i-search"/></svg><input id="layer-search" type="search" placeholder="Zoek een kaartlaag…" aria-label="Zoek een kaartlaag"></div>
+        <div class="catalog-caption"><span id="catalog-count"></span><button id="clear-overlays" class="text-button">Alles uit</button></div>
+        <div id="catalog-tree" class="catalog-tree"></div>
+      </section>
+      <section id="own-panel" role="tabpanel" aria-labelledby="tab-own" class="layer-panel" hidden><div id="own-layers"></div><div id="own-empty" class="empty-state"><svg><use href="#i-pin"/></svg><h2>Ruimte voor jouw gegevens</h2><p>Voeg een CSV toe. Elke import verschijnt hier als een eigen tijdelijke laag.</p></div></section>
+      <div class="sidebar-foot"><span class="privacy-dot"></span> Je CSV blijft in deze browser.<button class="text-button" id="privacy-button" aria-label="Lees over tijdelijke gegevens">ⓘ</button></div>
+    </aside>
+    <section class="map-region" aria-label="Interactieve erfgoedkaart">
+      <div id="map" tabindex="0" aria-label="Kaart in RD. Gebruik de plus- en minknop om te zoomen."></div>
+      <div class="map-search-wrap"><form id="place-search" class="map-search"><svg><use href="#i-search"/></svg><input id="place-input" type="search" aria-label="Zoek plaats of adres" placeholder="Zoek een plaats of adres…" autocomplete="off"><button type="submit" aria-label="Locatie zoeken">→</button></form><div id="place-results" class="place-results" hidden></div></div>
+      <div class="map-buttons"><button id="zoom-in" class="icon-button" aria-label="Inzoomen" title="Inzoomen">+</button><button id="zoom-out" class="icon-button" aria-label="Uitzoomen" title="Uitzoomen">−</button><button id="zoom-nl" class="icon-button" aria-label="Heel Nederland" title="Heel Nederland"><svg><use href="#i-crosshair"/></svg></button><button id="legend-button" class="icon-button" aria-label="Legenda tonen" title="Legenda"><svg><use href="#i-layers"/></svg></button></div>
+      <div class="north-arrow" aria-hidden="true"><span>N</span><svg viewBox="0 0 24 32"><path fill="#15445d" d="M12 3 3 27l9-6Z"/><path fill="#fff" stroke="#15445d" d="m12 3 9 24-9-6Z"/></svg></div>
+      <div class="basemap-switch" aria-label="Achtergrondkaart"><span>Ondergrond</span><button data-basemap="topografie-grijs-blauw-brt-achtergrondkaart-1" class="active" aria-pressed="true">Kaart</button><button data-basemap="luchtfoto-actueel-25-cm" aria-pressed="false">Luchtfoto</button><button data-basemap="topografie-water-brt-achtergrondkaart" aria-pressed="false">Water</button></div>
+      <section id="legend-panel" class="floating-panel" hidden><div class="panel-heading"><h2>Legenda</h2><button class="icon-button" id="close-legend" aria-label="Legenda sluiten">×</button></div><div id="legend-content"></div></section>
+      <section id="feature-panel" class="floating-panel feature-panel" hidden><div class="panel-heading"><h2 id="feature-title">Puntgegevens</h2><button class="icon-button" id="close-feature" aria-label="Puntgegevens sluiten">×</button></div><div id="feature-content"></div></section>
+      <div class="map-status"><span id="map-message">Verken het erfgoed. Voeg je eigen verhaal toe.</span><span id="rd-position">RD New · EPSG:28992</span></div>
+      <div id="tile-warning" class="tile-warning" role="status" hidden></div>
+    </section>
+  </main>
+  <div id="drop-overlay" class="drop-overlay" hidden><div><svg><use href="#i-upload"/></svg><strong>Laat je CSV hier los</strong><span>Voeg je RD-punten toe als tijdelijke laag</span></div></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="import-dialog" class="import-dialog"><div class="dialog-head"><div><span class="eyebrow">EIGEN GEGEVENS</span><h2>CSV op de kaart zetten</h2></div><button id="cancel-import-x" class="icon-button" aria-label="Import annuleren">×</button></div>
+    <div class="dialog-body"><div class="file-banner"><svg><use href="#i-table"/></svg><div><strong id="import-filename"></strong><span id="import-filemeta"></span></div><span class="badge">RD · EPSG:28992</span></div>
+      <div class="import-settings"><label>Scheidingsteken<select id="delimiter-select"><option value="">Automatisch herkennen</option><option value=";">Puntkomma ;</option><option value=",">Komma ,</option><option value="tab">Tab</option><option value="|">Pipe |</option></select></label><label class="checkbox-label"><input type="checkbox" id="has-header" checked>Eerste rij bevat kolomnamen</label></div>
+      <div class="mapping-grid"><label>X-coördinaat (oost)<select id="x-column"></select></label><label>Y-coördinaat (noord)<select id="y-column"></select></label><button id="swap-columns" class="text-button">X en Y omwisselen ⇄</button></div>
+      <div id="import-validation" class="validation" role="status"></div><button id="download-errors" class="text-button" hidden>Download rapport van overgeslagen rijen</button>
+      <div class="preview-heading">Voorbeeld van je bestand <small>eerste 5 rijen</small></div><div id="csv-preview" class="table-scroll"></div>
+      <div class="appearance-grid"><label>Laagnaam<input id="layer-name" type="text" maxlength="100"></label><label>Kleur<input type="color" id="layer-color" value="#c95636"></label></div>
+      <p class="small-note">Alleen geldige rijen worden toegevoegd. Je bestand wordt niet geüpload en de laag verdwijnt bij herladen.</p>
+    </div><div class="dialog-actions"><button id="cancel-import" class="secondary-button">Annuleren</button><button id="confirm-import" class="primary-button" disabled>Toevoegen aan de kaart</button></div>
+  </dialog>
+  <dialog id="info-dialog" class="info-dialog"><div class="dialog-head"><h2 id="info-title">Over deze atlas</h2><button id="close-info" class="icon-button" aria-label="Venster sluiten">×</button></div><div id="info-content" class="dialog-body"></div></dialog>
+  <dialog id="table-dialog" class="table-dialog"><div class="dialog-head"><div><span class="eyebrow">MIJN GEGEVENS</span><h2 id="table-title">Datatabel</h2></div><button id="close-table" class="icon-button" aria-label="Tabel sluiten">×</button></div><div class="table-toolbar"><input type="search" id="table-filter" placeholder="Zoek in je gegevens…" aria-label="Zoek in de datatabel"><span id="table-count"></span></div><div id="data-table" class="table-scroll"></div><div class="table-pagination"><button id="table-prev" class="secondary-button">← Vorige</button><span id="table-page"></span><button id="table-next" class="secondary-button">Volgende →</button></div></dialog>
+  <noscript><div class="noscript">Zet JavaScript aan om de kaart en CSV-import te gebruiken.</div></noscript>
+</body>
+</html>
